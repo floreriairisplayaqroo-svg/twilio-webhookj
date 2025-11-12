@@ -1,55 +1,33 @@
 import express from "express";
-import bodyParser from "body-parser";
-import { google } from "googleapis";
+import fetch from "node-fetch";
 
 const app = express();
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.post("/webhook", async (req, res) => {
-  const body = req.body.Body;
-  const from = req.body.From;
-  const to = req.body.To;
-  const profile = req.body.ProfileName;
-
-  console.log("📩 Mensaje recibido:", body, from, profile);
-
+app.post("/twilio", async (req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-    const auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-    });
-    const sheets = google.sheets({ version: "v4", auth });
-
-    const spreadsheetId = process.env.SPREADSHEET_ID;
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: "Hoja1!A:D",
-      valueInputOption: "RAW",
-      requestBody: {
-        values: [[new Date().toLocaleString(), from, profile, body]],
-      },
+    await fetch("https://script.google.com/macros/s/TU_URL_SCRIPT/exec", {
+      method: "POST",
+      body: new URLSearchParams(req.body),
     });
 
-    res.set("Content-Type", "text/xml");
-    res.send(`
-      <Response>
-        <Message>Recibido gracias 🌸</Message>
-      </Response>
-    `);
-  } catch (error) {
-    console.error("❌ Error guardando en Sheets:", error);
-    res.set("Content-Type", "text/xml");
-    res.send(`
-      <Response>
-        <Message>Error guardando en Sheets ❗</Message>
-      </Response>
-    `);
+    res
+      .type("text/xml")
+      .send(
+        '<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Recibido, gracias!</Message></Response>'
+      );
+  } catch (err) {
+    console.error("Error:", err);
+    res
+      .type("text/xml")
+      .send(
+        '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Error interno</Message></Response>'
+      );
   }
 });
 
-app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+app.get("/", (req, res) => res.send("Webhook activo 🟢"));
+
+app.listen(3000, () => console.log("Servidor iniciado en puerto 3000"));
 
 
