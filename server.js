@@ -29,7 +29,7 @@ app.post("/webhook", async (req, res) => {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "Hoja1!A:D",
+      range: "repartidores!A:D",
       valueInputOption: "RAW",
       requestBody: {
         values: [[new Date().toLocaleString(), from, profile, body]],
@@ -56,6 +56,7 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
