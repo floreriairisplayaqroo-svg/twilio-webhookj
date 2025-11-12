@@ -3,15 +3,19 @@ import bodyParser from "body-parser";
 import { google } from "googleapis";
 
 const app = express();
-app.use(bodyParser.urlencoded({ extended: true }));
+
+// ⚙️ Configuración general
+app.use(bodyParser.urlencoded({ extended: false })); // ← mejor "false" para Twilio
 app.use(bodyParser.json());
 
+// ✅ Ruta base
 app.get("/", (req, res) => {
   res.send("🌸 Servidor activo. Esperando mensajes de Twilio...");
 });
 
+// ✅ MENSAJES ENTRANTES (Webhook principal)
 app.post("/webhook", async (req, res) => {
- try {
+  try {
     const body = req.body.Body;
     const from = req.body.From;
     const profile = req.body.ProfileName || "";
@@ -25,20 +29,19 @@ app.post("/webhook", async (req, res) => {
     console.log("SID:", sid);
     console.log("Estado:", status);
 
-    // --- Autenticación con Google Sheets ---
+    // 🔐 Autenticación con Google Sheets
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
-
-   const sheets = google.sheets({ version: "v4", auth });
+    const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    // --- Guardar todos los datos en Sheets ---
+    // 📝 Guardar datos en hoja "repartidores"
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "repartidores!A:G",
+      range: "repartidores!A:F", // no necesitas G si solo guardas 6 columnas
       valueInputOption: "RAW",
       requestBody: {
         values: [[
@@ -52,7 +55,7 @@ app.post("/webhook", async (req, res) => {
       },
     });
 
-    // Responder a Twilio con XML
+    // 📩 Responder a Twilio (MUST be XML)
     res.set("Content-Type", "text/xml");
     res.send(`
       <Response>
@@ -71,6 +74,7 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+// ✅ ESTADOS DE MENSAJES SALIENTES (Delivery Callback)
 app.post("/status", async (req, res) => {
   try {
     const sid = req.body.MessageSid;
@@ -82,20 +86,19 @@ app.post("/status", async (req, res) => {
 
     console.log(`📤 Estado actualizado: ${sid} -> ${status}`);
 
-    // Autenticación con Google Sheets
+    // 🔐 Autenticación con Google Sheets
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
-
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    // Guardar en una hoja "enviados" o "logs"
+    // 📝 Guardar en hoja "enviados"
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "enviados!A:G",
+      range: "enviados!A:F",
       valueInputOption: "RAW",
       requestBody: {
         values: [[date, from, to, body, sid, status]],
@@ -109,9 +112,8 @@ app.post("/status", async (req, res) => {
   }
 });
 
-
+// 🚀 Iniciar servidor
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
-
 
 
 
