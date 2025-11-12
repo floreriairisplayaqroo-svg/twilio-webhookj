@@ -1,37 +1,55 @@
-app.post("/twilio", async (req, res) => {
+import express from "express";
+import bodyParser from "body-parser";
+import { google } from "googleapis";
+
+const app = express();
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+app.post("/webhook", async (req, res) => {
+  const body = req.body.Body;
+  const from = req.body.From;
+  const to = req.body.To;
+  const profile = req.body.ProfileName;
+
+  console.log("📩 Mensaje recibido:", body, from, profile);
+
   try {
-    // 🔍 Muestra lo que llega desde Twilio
-    console.log("Datos recibidos desde Twilio:", req.body);
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+    const sheets = google.sheets({ version: "v4", auth });
 
-    // 📨 Convierte los datos a formato que Apps Script entiende
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(req.body)) {
-      params.append(key, value);
-    }
+    const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    // 🚀 Envía los datos al Apps Script
-    const response = await fetch("https://script.google.com/macros/s/TU_URL_SCRIPT/exec", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: "Hoja1!A:D",
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [[new Date().toLocaleString(), from, profile, body]],
+      },
     });
 
-    console.log("Respuesta de Apps Script:", await response.text());
-
-    // 📩 Respuesta para Twilio (debe ser XML)
-    res
-      .type("text/xml")
-      .send(
-        '<?xml version="1.0" encoding="UTF-8"?><Response><Message>✅ Recibido, gracias!</Message></Response>'
-      );
-  } catch (err) {
-    console.error("Error:", err);
-    res
-      .type("text/xml")
-      .send(
-        '<?xml version="1.0" encoding="UTF-8"?><Response><Message>❌ Error interno</Message></Response>'
-      );
+    res.set("Content-Type", "text/xml");
+    res.send(`
+      <Response>
+        <Message>Recibido gracias 🌸</Message>
+      </Response>
+    `);
+  } catch (error) {
+    console.error("❌ Error guardando en Sheets:", error);
+    res.set("Content-Type", "text/xml");
+    res.send(`
+      <Response>
+        <Message>Error guardando en Sheets ❗</Message>
+      </Response>
+    `);
   }
 });
+
+app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
 
 
