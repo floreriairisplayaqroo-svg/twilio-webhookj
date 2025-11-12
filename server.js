@@ -3,17 +3,15 @@ import bodyParser from "body-parser";
 import { google } from "googleapis";
 
 const app = express();
-
-// ⚙️ Configuración general
-app.use(bodyParser.urlencoded({ extended: false })); // ← mejor "false" para Twilio
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// ✅ Ruta base
+// ✅ Verificación simple
 app.get("/", (req, res) => {
   res.send("🌸 Servidor activo. Esperando mensajes de Twilio...");
 });
 
-// ✅ MENSAJES ENTRANTES (Webhook principal)
+// ✅ Webhook: mensajes entrantes desde WhatsApp
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body.Body;
@@ -22,26 +20,22 @@ app.post("/webhook", async (req, res) => {
     const sid = req.body.MessageSid || req.body.SmsSid || "sin_sid";
     const status = req.body.SmsStatus || "recibido";
 
-    console.log("📩 Mensaje recibido:");
-    console.log("Texto:", body);
-    console.log("De:", from);
-    console.log("Perfil:", profile);
-    console.log("SID:", sid);
-    console.log("Estado:", status);
+    console.log("📩 Mensaje recibido:", { from, profile, body, sid, status });
 
-    // 🔐 Autenticación con Google Sheets
+    // Autenticación con Google Sheets
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
+
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    // 📝 Guardar datos en hoja "repartidores"
+    // Guardar el mensaje recibido
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "repartidores!A:F", // no necesitas G si solo guardas 6 columnas
+      range: "repartidores!A:F",
       valueInputOption: "RAW",
       requestBody: {
         values: [[
@@ -55,7 +49,7 @@ app.post("/webhook", async (req, res) => {
       },
     });
 
-    // 📩 Responder a Twilio (MUST be XML)
+    // Responder a Twilio (MUST be XML)
     res.set("Content-Type", "text/xml");
     res.send(`
       <Response>
@@ -64,7 +58,7 @@ app.post("/webhook", async (req, res) => {
     `);
 
   } catch (error) {
-    console.error("❌ Error guardando en Sheets:", error);
+    console.error("❌ Error guardando mensaje:", error);
     res.set("Content-Type", "text/xml");
     res.send(`
       <Response>
@@ -74,47 +68,63 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ✅ ESTADOS DE MENSAJES SALIENTES (Delivery Callback)
+// ✅ Webhook: actualiza estado de mensajes (en lugar de agregar fila nueva)
 app.post("/status", async (req, res) => {
   try {
     const sid = req.body.MessageSid;
     const status = req.body.MessageStatus;
-    const to = req.body.To;
-    const from = req.body.From;
-    const body = req.body.Body || "";
-    const date = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
-
     console.log(`📤 Estado actualizado: ${sid} -> ${status}`);
 
-    // 🔐 Autenticación con Google Sheets
+    // Autenticación con Sheets
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
+
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    // 📝 Guardar en hoja "enviados"
-    await sheets.spreadsheets.values.append({
+    // Leer todas las filas para encontrar el SID
+    const readRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "enviados!A:F",
+      range: "repartidores!A:F",
+    });
+
+    const rows = readRes.data.values || [];
+    const sidIndex = 4; // Columna E (índice 4, empezando desde 0)
+    const statusIndex = 5; // Columna F
+
+    // Buscar el SID
+    const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
+    if (rowNumber === -1) {
+      console.warn("⚠️ SID no encontrado en la hoja:", sid);
+      return res.sendStatus(200);
+    }
+
+    const targetRow = rowNumber + 1; // +1 porque la hoja empieza en 1
+    const cell = `F${targetRow}`; // Columna F (estado)
+
+    // Actualizar estado en la hoja
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `repartidores!${cell}`,
       valueInputOption: "RAW",
       requestBody: {
-        values: [[date, from, to, body, sid, status]],
+        values: [[status]],
       },
     });
 
+    console.log(`✅ Estado actualizado en fila ${targetRow}: ${status}`);
     res.sendStatus(200);
+
   } catch (error) {
-    console.error("❌ Error guardando estado de mensaje:", error);
+    console.error("❌ Error actualizando estado:", error);
     res.sendStatus(500);
   }
 });
 
-// 🚀 Iniciar servidor
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
-
 
 
 
