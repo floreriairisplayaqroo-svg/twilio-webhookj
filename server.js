@@ -71,7 +71,47 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+app.post("/status", async (req, res) => {
+  try {
+    const sid = req.body.MessageSid;
+    const status = req.body.MessageStatus;
+    const to = req.body.To;
+    const from = req.body.From;
+    const body = req.body.Body || "";
+    const date = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+
+    console.log(`📤 Estado actualizado: ${sid} -> ${status}`);
+
+    // Autenticación con Google Sheets
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+
+    const sheets = google.sheets({ version: "v4", auth });
+    const spreadsheetId = process.env.SPREADSHEET_ID;
+
+    // Guardar en una hoja "enviados" o "logs"
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: "enviados!A:G",
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [[date, from, to, body, sid, status]],
+      },
+    });
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Error guardando estado de mensaje:", error);
+    res.sendStatus(500);
+  }
+});
+
+
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
