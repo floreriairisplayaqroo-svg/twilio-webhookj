@@ -1,16 +1,18 @@
 {
-  "name": "twilio-webhook",
+  "name": "twilio-whatsapp-sheets",
   "version": "1.0.0",
-  "type": "module",
+  "description": "Servidor Express que recibe mensajes de Twilio WhatsApp y los guarda en Google Sheets",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "node-fetch": "^3.3.2"
-    "googleapis": "^135.0.0"
+    "body-parser": "^1.20.2",
+    "googleapis": "^131.0.0"
   }
 }
+
 
 
