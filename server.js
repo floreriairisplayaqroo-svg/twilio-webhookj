@@ -11,28 +11,44 @@ app.get("/", (req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
-  try {
+ try {
     const body = req.body.Body;
     const from = req.body.From;
     const profile = req.body.ProfileName || "";
-    console.log("📩 Mensaje recibido:", body, from, profile);
+    const sid = req.body.MessageSid || req.body.SmsSid || "sin_sid";
+    const status = req.body.SmsStatus || "recibido";
 
-    // Autenticación con Google Sheets
+    console.log("📩 Mensaje recibido:");
+    console.log("Texto:", body);
+    console.log("De:", from);
+    console.log("Perfil:", profile);
+    console.log("SID:", sid);
+    console.log("Estado:", status);
+
+    // --- Autenticación con Google Sheets ---
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
 
-    const sheets = google.sheets({ version: "v4", auth });
+   const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
+    // --- Guardar todos los datos en Sheets ---
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: "repartidores!A:F",
+      range: "repartidores!A:G",
       valueInputOption: "RAW",
       requestBody: {
-        values: [[new Date().toLocaleString(), from, profile, body]],
+        values: [[
+          new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" }),
+          from,
+          profile,
+          body,
+          sid,
+          status
+        ]],
       },
     });
 
@@ -56,6 +72,7 @@ app.post("/webhook", async (req, res) => {
 });
 
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
