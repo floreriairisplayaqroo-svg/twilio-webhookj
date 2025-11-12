@@ -96,7 +96,14 @@ app.post("/status", async (req, res) => {
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
     if (rowNumber === -1) {
       console.log("🆕 Nuevo mensaje saliente detectado:", sid);
-
+ // ✅ Consultamos el mensaje en Twilio para obtener el texto
+      let body = "";
+      try {
+        const msgData = await twilioClient.messages(sid).fetch();
+        body = msgData.body || "(sin texto)";
+      } catch (e) {
+        console.warn("⚠️ No se pudo obtener el texto del mensaje:", e.message);
+      }
       // No existe → lo guardamos como nuevo mensaje saliente
       await sheets.spreadsheets.values.append({
         spreadsheetId,
@@ -131,6 +138,7 @@ app.post("/status", async (req, res) => {
 });
 
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
