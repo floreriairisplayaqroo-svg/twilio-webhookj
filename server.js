@@ -97,7 +97,9 @@ app.post("/status", async (req, res) => {
     if (rowNumber === -1) {
       console.log("🆕 Nuevo mensaje saliente detectado:", sid);
  // ✅ Consultamos el mensaje en Twilio para obtener el texto
-      const twilioClient = require("twilio")(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+      import twilio from "twilio";
+// Inicializar cliente Twilio
+const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
 const msgData = await twilioClient.messages(sid).fetch();
 const bodyText = msgData.body;
@@ -136,6 +138,7 @@ const bodyText = msgData.body;
 });
 
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
