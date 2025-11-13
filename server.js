@@ -1,6 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import { google } from "googleapis";
+import twilio from "twilio";
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -97,12 +98,11 @@ app.post("/status", async (req, res) => {
     if (rowNumber === -1) {
       console.log("🆕 Nuevo mensaje saliente detectado:", sid);
  // ✅ Consultamos el mensaje en Twilio para obtener el texto
-      import twilio from "twilio";
-// Inicializar cliente Twilio
 const twilioClient = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
+// Obtener mensaje saliente
 const msgData = await twilioClient.messages(sid).fetch();
-const bodyText = msgData.body;
+const bodyText = msgData.body || "(sin texto)";
 
       // No existe → lo guardamos como nuevo mensaje saliente
       await sheets.spreadsheets.values.append({
@@ -138,6 +138,7 @@ const bodyText = msgData.body;
 });
 
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
