@@ -15,6 +15,7 @@ app.post("/webhook", async (req, res) => {
     const from = req.body.From;
     const profile = req.body.ProfileName || "";
     const sid = req.body.MessageSid;
+    const status = req.body.SmsStatus || "recibido";
 
     console.log("📩 Mensaje entrante:", { from, profile, body });
 
@@ -23,7 +24,6 @@ app.post("/webhook", async (req, res) => {
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
-
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
@@ -44,15 +44,15 @@ app.post("/webhook", async (req, res) => {
       },
     });
 
-    // ⚠️ NO TwiML → evita que Twilio duplique mensajes
-    return res.sendStatus(200);
+    // RESPUESTA SIN ENVIAR MENSAJE (para evitar duplicados)
+    res.set("Content-Type", "text/xml");
+    res.send("<Response></Response>");
 
   } catch (error) {
-    console.error("❌ Error en webhook de entrada:", error);
-    return res.sendStatus(200);
+    console.error("❌ Error con webhook de entrada:", error);
+    res.send("<Response></Response>");
   }
 });
-
 
 
 // ==========================
@@ -61,6 +61,7 @@ app.post("/webhook", async (req, res) => {
 app.listen(3000, () =>
   console.log("🚀 Servidor en puerto 3000")
 );
+
 
 
 
