@@ -82,18 +82,27 @@ app.post("/status", async (req, res) => {
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
 
     // 📌 Si ya existe → solo actualiza estado y NO guarda otra vez
-    if (rowNumber >= 0) {
-      const targetRow = rowNumber + 1;
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `repartidores!F${targetRow}`,
-        valueInputOption: "RAW",
-        requestBody: { values: [[status]] },
-      });
+  // Si ya existe el SID → actualizar estado solo si cambió
+if (rowNumber >= 0) {
+  const targetRow = rowNumber + 1;
+  const currentStatus = rows[rowNumber][5] || ""; // Columna F
 
-      console.log(`🔄 Estado actualizado para SID ${sid}: ${status}`);
-      return res.sendStatus(200);
-    }
+  if (currentStatus === status) {
+    console.log(`⏹ Ignorado: estado repetido (${status}) para SID ${sid}`);
+    return res.sendStatus(200);
+  }
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `repartidores!F${targetRow}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[status]] },
+  });
+
+  console.log(`🔄 Estado actualizado: ${currentStatus} → ${status}`);
+  return res.sendStatus(200);
+}
+
 
     // 📌 Si NO existe todavía → guardar SOLO si es el primer envío del mensaje
     const estadosPermitidosParaRegistrar = ["sent", "queued", "accepted"];
@@ -124,6 +133,7 @@ app.post("/status", async (req, res) => {
 
 
 app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
+
 
 
 
