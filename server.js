@@ -95,19 +95,23 @@ app.post("/status", async (req, res) => {
 
     // Buscar el SID en la hoja
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
-    if (rowNumber === -1) {
-      console.log("🆕 Nuevo mensaje saliente detectado:", sid);
-
-      // No existe → lo guardamos como nuevo mensaje saliente
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: "repartidores!A:G",
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [[date, from, to, body, sid, status, "saliente"]],
-        },
-      });
-    } else {
+   if (rowNumber === -1) {
+  // Si no hay body, significa que Twilio NO está informando el texto, solo el estado
+  if (!body || body.trim() === "") {
+    console.log("ℹ️ Ignorado: update de estado sin contenido del mensaje");
+  } else {
+    console.log("🆕 Nuevo mensaje saliente detectado:", sid);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: "repartidores!A:G",
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [[date, from, to, body, sid, status, "saliente"]],
+      },
+    });
+  }
+}
+ else {
       // Existe → actualizamos solo el estado
       const targetRow = rowNumber + 1;
       const cell = `F${targetRow}`;
@@ -132,6 +136,7 @@ app.post("/status", async (req, res) => {
 });
 
 app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
+
 
 
 
