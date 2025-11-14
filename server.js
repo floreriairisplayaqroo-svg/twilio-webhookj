@@ -6,8 +6,9 @@ const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// 📄 Webhook de mensajes ENTRANTES
-// 📄 Webhook de mensajes ENTRANTES
+// ==========================
+// 📩 WEBHOOK DE MENSAJES ENTRANTES
+// ==========================
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body.Body;
@@ -43,29 +44,19 @@ app.post("/webhook", async (req, res) => {
       },
     });
 
-    // 🚫 Nunca respondas TwiML si NO quieres enviar un mensaje
+    // ⚠️ NO TwiML → evita que Twilio duplique mensajes
     return res.sendStatus(200);
 
   } catch (error) {
-    console.error("❌ Error con webhook de entrada:", error);
+    console.error("❌ Error en webhook de entrada:", error);
     return res.sendStatus(200);
   }
 });
 
 
-    // RESPUESTA SIN ENVIAR MENSAJE (para evitar duplicados)
-    res.set("Content-Type", "text/xml");
-    res.send("<Response></Response>");
-
-  } catch (error) {
-    console.error("❌ Error con webhook de entrada:", error);
-    res.send("<Response></Response>");
-  }
-});
-
-
-// 📦 Webhook statusCallback de Twilio (mensajes SALIENTES)
-// 📦 Webhook de estado (statusCallback)
+// ==========================
+// 📦 WEBHOOK DE STATUSCALLBACK (MENSAJES SALIENTES)
+// ==========================
 app.post("/status", async (req, res) => {
   try {
     const sid = req.body.MessageSid;
@@ -82,6 +73,7 @@ app.post("/status", async (req, res) => {
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
+
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
@@ -98,22 +90,30 @@ app.post("/status", async (req, res) => {
     // Buscar el SID
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
 
-    // Si no existe → registrar mensaje saliente por primera vez
+    // Si no existe → es un mensaje que enviamos por primera vez
     if (rowNumber === -1) {
       await sheets.spreadsheets.values.append({
         spreadsheetId,
         range: "repartidores!A:G",
         valueInputOption: "RAW",
         requestBody: {
-          values: [[date, from, to, body, sid, status, "saliente"]],
+          values: [[
+            date,
+            from,
+            to,
+            body,
+            sid,
+            status,
+            "saliente"
+          ]],
         },
       });
 
       console.log("🆕 Mensaje saliente guardado con estado:", status);
-      return res.sendStatus(200); // no se devuelve XML
+      return res.sendStatus(200);
     }
 
-    // Si existe → solo actualizar si el estado cambió
+    // Si existe → actualizar SOLO si cambió el estado
     const currentStatus = rows[rowNumber][statusIndex] || "";
     if (currentStatus === status) {
       console.log(`⏹ Ignorado: estado repetido (${status})`);
@@ -128,19 +128,21 @@ app.post("/status", async (req, res) => {
     });
 
     console.log(`🔄 Estado actualizado ${currentStatus} → ${status}`);
-    res.sendStatus(200);
+    return res.sendStatus(200);
 
   } catch (error) {
     console.error("❌ Error guardando estado:", error);
-    res.sendStatus(500);
+    return res.sendStatus(500);
   }
 });
 
 
-
-
-app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
-
+// ==========================
+// 🚀 SERVIDOR
+// ==========================
+app.listen(3000, () =>
+  console.log("🚀 Servidor en puerto 3000")
+);
 
 
 
