@@ -7,13 +7,13 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 // 📄 Webhook de mensajes ENTRANTES
+// 📄 Webhook de mensajes ENTRANTES
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body.Body;
     const from = req.body.From;
     const profile = req.body.ProfileName || "";
     const sid = req.body.MessageSid;
-    const status = req.body.SmsStatus || "recibido";
 
     console.log("📩 Mensaje entrante:", { from, profile, body });
 
@@ -22,6 +22,7 @@ app.post("/webhook", async (req, res) => {
       credentials,
       scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
+
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
@@ -41,6 +42,16 @@ app.post("/webhook", async (req, res) => {
         ]],
       },
     });
+
+    // 🚫 Nunca respondas TwiML si NO quieres enviar un mensaje
+    return res.sendStatus(200);
+
+  } catch (error) {
+    console.error("❌ Error con webhook de entrada:", error);
+    return res.sendStatus(200);
+  }
+});
+
 
     // RESPUESTA SIN ENVIAR MENSAJE (para evitar duplicados)
     res.set("Content-Type", "text/xml");
@@ -129,6 +140,7 @@ app.post("/status", async (req, res) => {
 
 
 app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
+
 
 
 
