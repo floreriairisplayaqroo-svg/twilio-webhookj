@@ -2,21 +2,20 @@ import express from "express";
 import bodyParser from "body-parser";
 import { google } from "googleapis";
 
-
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// 📄 Webhook de Twilio (mensajes entrantes)
+// 📄 Webhook de mensajes ENTRANTES
 app.post("/webhook", async (req, res) => {
   try {
     const body = req.body.Body;
     const from = req.body.From;
     const profile = req.body.ProfileName || "";
-    const sid = req.body.MessageSid || req.body.SmsSid || "sin_sid";
+    const sid = req.body.MessageSid;
     const status = req.body.SmsStatus || "recibido";
 
-    console.log("📩 Mensaje entrante:", { from, profile, body, sid, status });
+    console.log("📩 Mensaje entrante:", { from, profile, body });
 
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
@@ -37,42 +36,33 @@ app.post("/webhook", async (req, res) => {
           profile,
           body,
           sid,
-          status,
+          "recibido",
           "entrante"
         ]],
       },
     });
 
+    // RESPUESTA SIN ENVIAR MENSAJE (para evitar duplicados)
     res.set("Content-Type", "text/xml");
-    res.send(`
-      <Response>
-        <Message>Recibido gracias 🌸</Message>
-      </Response>
-    `);
+    res.send("<Response></Response>");
 
   } catch (error) {
-    console.error("❌ Error guardando mensaje entrante:", error);
-    res.set("Content-Type", "text/xml");
-    res.send(`
-      <Response>
-        <Message>Error al guardar en Sheets ❗</Message>
-      </Response>
-    `);
+    console.error("❌ Error con webhook de entrada:", error);
+    res.send("<Response></Response>");
   }
 });
 
-// 📦 Webhook de estado (statusCallback)
+
+// 📦 Webhook statusCallback de Twilio (mensajes SALIENTES)
 app.post("/status", async (req, res) => {
   try {
     const sid = req.body.MessageSid;
     const status = req.body.MessageStatus;
-    const to = req.body.To;
-    const from = req.body.From;
     const body = req.body.Body || "";
-    const direction = req.body.Direction || "saliente";
-    const date = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+    const from = req.body.From;
+    const to = req.body.To;
 
-    console.log(`📤 Estado actualizado (${direction}): ${sid} -> ${status}`);
+    const date = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
 
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
@@ -82,62 +72,49 @@ app.post("/status", async (req, res) => {
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    // Leer todas las filas para encontrar el SID
     const readRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: "repartidores!A:G",
     });
 
     const rows = readRes.data.values || [];
-    const sidIndex = 4; // Columna E
-    const statusIndex = 5; // Columna F
-    const typeIndex = 6; // Columna G
+    const sidIndex = 4;
 
-    // Buscar el SID en la hoja
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
-   if (rowNumber === -1) {
-  // Si no hay body, significa que Twilio NO está informando el texto, solo el estado
-  if (!body || body.trim() === "") {
-    console.log("ℹ️ Ignorado: update de estado sin contenido del mensaje");
-  } else {
-    console.log("🆕 Nuevo mensaje saliente detectado:", sid);
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: "repartidores!A:G",
-      valueInputOption: "RAW",
-      requestBody: {
-        values: [[date, from, to, body, sid, status, "saliente"]],
-      },
-    });
-  }
-}
- else {
-      // Existe → actualizamos solo el estado
-      const targetRow = rowNumber + 1;
-      const cell = `F${targetRow}`;
 
-      await sheets.spreadsheets.values.update({
+    // 📌 Si el SID NO existe → es nuevo mensaje SALIENTE
+    if (rowNumber === -1 && body && !body.includes("Recibido gracias 🌸")) {
+      console.log("🆕 Guardando mensaje saliente:", body);
+
+      await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: `repartidores!${cell}`,
+        range: "repartidores!A:G",
         valueInputOption: "RAW",
         requestBody: {
-          values: [[status]],
+          values: [[date, from, to, body, sid, status, "saliente"]],
         },
       });
 
-      console.log(`✅ Estado actualizado en fila ${targetRow}: ${status}`);
+    } else if (rowNumber >= 0) {
+      // 📌 Si ya existe → solo actualiza estado
+      const targetRow = rowNumber + 1;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `repartidores!F${targetRow}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [[status]] },
+      });
     }
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("❌ Error guardando estado o mensaje saliente:", error);
+    console.error("❌ Error en callback:", error);
     res.sendStatus(500);
   }
 });
 
-app.listen(3000, () => console.log("🚀 Servidor activo en puerto 3000"));
 
-
+app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
 
 
 
