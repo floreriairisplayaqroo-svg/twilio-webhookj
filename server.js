@@ -54,15 +54,17 @@ app.post("/webhook", async (req, res) => {
 
 
 // 📦 Webhook statusCallback de Twilio (mensajes SALIENTES)
+// 📦 Webhook de estado (statusCallback)
 app.post("/status", async (req, res) => {
   try {
     const sid = req.body.MessageSid;
-    const status = req.body.MessageStatus; // sent, delivered, read
-    const body = req.body.Body || "";
-    const from = req.body.From;
+    const status = req.body.MessageStatus;
     const to = req.body.To;
-
+    const from = req.body.From;
+    const body = req.body.Body || "";
     const date = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+
+    console.log(`📤 Estado recibido: ${sid} -> ${status}`);
 
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
     const auth = new google.auth.GoogleAuth({
@@ -72,67 +74,62 @@ app.post("/status", async (req, res) => {
     const sheets = google.sheets({ version: "v4", auth });
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
+    // Leer todas las filas para encontrar el SID
     const readRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: "repartidores!A:G",
     });
 
     const rows = readRes.data.values || [];
-    const sidIndex = 4;
+    const sidIndex = 4; // Columna E
+    const statusIndex = 5; // Columna F
+
+    // Buscar el SID
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
 
-    // 📌 Si ya existe → solo actualiza estado y NO guarda otra vez
-  // Si ya existe el SID → actualizar estado solo si cambió
-if (rowNumber >= 0) {
-  const targetRow = rowNumber + 1;
-  const currentStatus = rows[rowNumber][5] || ""; // Columna F
+    // Si no existe → registrar mensaje saliente por primera vez
+    if (rowNumber === -1) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: "repartidores!A:G",
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [[date, from, to, body, sid, status, "saliente"]],
+        },
+      });
 
-  if (currentStatus === status) {
-    console.log(`⏹ Ignorado: estado repetido (${status}) para SID ${sid}`);
-    return res.sendStatus(200);
-  }
+      console.log("🆕 Mensaje saliente guardado con estado:", status);
+      return res.sendStatus(200); // no se devuelve XML
+    }
 
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `repartidores!F${targetRow}`,
-    valueInputOption: "RAW",
-    requestBody: { values: [[status]] },
-  });
-
-  console.log(`🔄 Estado actualizado: ${currentStatus} → ${status}`);
-  return res.sendStatus(200);
-}
-
-
-    // 📌 Si NO existe todavía → guardar SOLO si es el primer envío del mensaje
-    const estadosPermitidosParaRegistrar = ["sent", "queued", "accepted"];
-    if (!estadosPermitidosParaRegistrar.includes(status)) {
-      console.log(`⛔ Ignorado: callback tardío (${status}) sin registro previo`);
+    // Si existe → solo actualizar si el estado cambió
+    const currentStatus = rows[rowNumber][statusIndex] || "";
+    if (currentStatus === status) {
+      console.log(`⏹ Ignorado: estado repetido (${status})`);
       return res.sendStatus(200);
     }
 
-    // Guardar nuevo mensaje saliente
-    await sheets.spreadsheets.values.append({
+    await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: "repartidores!A:G",
+      range: `repartidores!F${rowNumber + 1}`,
       valueInputOption: "RAW",
-      requestBody: {
-        values: [[date, from, to, body, sid, status, "saliente"]],
-      },
+      requestBody: { values: [[status]] },
     });
 
-    console.log(`🆕 Mensaje saliente guardado: ${body}`);
-
+    console.log(`🔄 Estado actualizado ${currentStatus} → ${status}`);
     res.sendStatus(200);
+
   } catch (error) {
-    console.error("❌ Error en status callback:", error);
+    console.error("❌ Error guardando estado:", error);
     res.sendStatus(500);
   }
 });
 
 
 
+
 app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
+
 
 
 
