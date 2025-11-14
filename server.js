@@ -57,7 +57,7 @@ app.post("/webhook", async (req, res) => {
 app.post("/status", async (req, res) => {
   try {
     const sid = req.body.MessageSid;
-    const status = req.body.MessageStatus;
+    const status = req.body.MessageStatus; // sent, delivered, read
     const body = req.body.Body || "";
     const from = req.body.From;
     const to = req.body.To;
@@ -79,24 +79,10 @@ app.post("/status", async (req, res) => {
 
     const rows = readRes.data.values || [];
     const sidIndex = 4;
-
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
 
-    // 📌 Si el SID NO existe → es nuevo mensaje SALIENTE
-    if (rowNumber === -1 && body && !body.includes("Recibido gracias 🌸")) {
-      console.log("🆕 Guardando mensaje saliente:", body);
-
-      await sheets.spreadsheets.values.append({
-        spreadsheetId,
-        range: "repartidores!A:G",
-        valueInputOption: "RAW",
-        requestBody: {
-          values: [[date, from, to, body, sid, status, "saliente"]],
-        },
-      });
-
-    } else if (rowNumber >= 0) {
-      // 📌 Si ya existe → solo actualiza estado
+    // 📌 Si ya existe → solo actualiza estado y NO guarda otra vez
+    if (rowNumber >= 0) {
       const targetRow = rowNumber + 1;
       await sheets.spreadsheets.values.update({
         spreadsheetId,
@@ -104,17 +90,41 @@ app.post("/status", async (req, res) => {
         valueInputOption: "RAW",
         requestBody: { values: [[status]] },
       });
+
+      console.log(`🔄 Estado actualizado para SID ${sid}: ${status}`);
+      return res.sendStatus(200);
     }
+
+    // 📌 Si NO existe todavía → guardar SOLO si es el primer envío del mensaje
+    const estadosPermitidosParaRegistrar = ["sent", "queued", "accepted"];
+    if (!estadosPermitidosParaRegistrar.includes(status)) {
+      console.log(`⛔ Ignorado: callback tardío (${status}) sin registro previo`);
+      return res.sendStatus(200);
+    }
+
+    // Guardar nuevo mensaje saliente
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: "repartidores!A:G",
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [[date, from, to, body, sid, status, "saliente"]],
+      },
+    });
+
+    console.log(`🆕 Mensaje saliente guardado: ${body}`);
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("❌ Error en callback:", error);
+    console.error("❌ Error en status callback:", error);
     res.sendStatus(500);
   }
 });
 
 
+
 app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
+
 
 
 
