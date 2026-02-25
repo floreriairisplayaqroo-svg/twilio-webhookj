@@ -9,7 +9,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 /* =====================================================
-   📩 WEBHOOK MENSAJES ENTRANTES (WhatsApp / SMS)
+   📩 WEBHOOK MENSAJES ENTRANTES
 ===================================================== */
 
 app.post("/webhook", async (req, res) => {
@@ -23,7 +23,6 @@ app.post("/webhook", async (req, res) => {
 
     console.log("📩 Entrante:", { from, body, numMedia });
 
-    // 🔐 Google Auth
     const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
     const auth = new google.auth.GoogleAuth({
@@ -49,7 +48,7 @@ app.post("/webhook", async (req, res) => {
       const mediaUrl = req.body.MediaUrl0;
       const mediaType = req.body.MediaContentType0 || "image/jpeg";
 
-      // Descargar desde Twilio con autenticación
+      // Descargar imagen desde Twilio
       const response = await axios.get(mediaUrl, {
         responseType: "arraybuffer",
         auth: {
@@ -65,7 +64,7 @@ app.post("/webhook", async (req, res) => {
       const extension = mediaType.split("/")[1] || "jpg";
       const fileName = `Twilio_${Date.now()}.${extension}`;
 
-      // Subir a Drive
+      // Subir a Drive (IMPORTANTE supportsAllDrives)
       const file = await drive.files.create({
         requestBody: {
           name: fileName,
@@ -75,6 +74,7 @@ app.post("/webhook", async (req, res) => {
           mimeType: mediaType,
           body: bufferStream,
         },
+        supportsAllDrives: true,
       });
 
       // Hacer público
@@ -84,13 +84,14 @@ app.post("/webhook", async (req, res) => {
           role: "reader",
           type: "anyone",
         },
+        supportsAllDrives: true,
       });
 
       imageLink = `https://drive.google.com/file/d/${file.data.id}/view`;
     }
 
     /* ===============================
-       📊 GUARDAR EN GOOGLE SHEETS
+       📊 GUARDAR EN SHEETS
     =============================== */
     await sheets.spreadsheets.values.append({
       spreadsheetId,
@@ -151,10 +152,8 @@ app.post("/status", async (req, res) => {
 
     const rows = readRes.data.values || [];
     const sidIndex = 4;
-
     const rowNumber = rows.findIndex(r => r[sidIndex] === sid);
 
-    // 🆕 Si no existe → guardar como saliente nuevo
     if (rowNumber === -1 && body && !body.includes("Recibido gracias 🌸")) {
 
       await sheets.spreadsheets.values.append({
@@ -167,6 +166,7 @@ app.post("/status", async (req, res) => {
       });
 
     } else if (rowNumber >= 0) {
+
       const targetRow = rowNumber + 1;
 
       await sheets.spreadsheets.values.update({
@@ -189,7 +189,6 @@ app.post("/status", async (req, res) => {
 /* ===================================================== */
 
 app.listen(3000, () => console.log("🚀 Servidor en puerto 3000"));
-
 
 
 
